@@ -10,15 +10,29 @@ import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 
 // ---------- PASTE YOUR VALUES ----------
-const SUPABASE_URL = 'https://iztqeczxegnqlopiitys.supabase.co';   // <— replace
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6dHFlY3p4ZWducWxvcGlpdHlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNTYyNzMsImV4cCI6MjA3MDgzMjI3M30.k4VEC3WvlN9fg-YtgR7Ehj41rCScTLEXbfq4wV9e7uY';                // <— replace
+const SUPABASE_URL = 'https://iztqeczxegnqlopiitys.supabase.co';   // <— replace if needed
+const SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6dHFlY3p4ZWducWxvcGlpdHlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNTYyNzMsImV4cCI6MjA3MDgzMjI3M30.k4VEC3WvlN9fg-YtgR7Ehj41rCScTLEXbfq4wV9e7uY'; // <— replace if needed
 // --------------------------------------
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY
 );
 
-const CATEGORIES = ['Work Trip', 'Holiday', 'Meeting', 'Maintenance', 'On-call'];
+// Categories (additions: Doctor, Dentist, Barber)
+const CATEGORIES = [
+  'Work Trip',
+  'Holiday',
+  'Meeting',
+  'Maintenance',
+  'On-call',
+  'Doctor',
+  'Dentist',
+  'Barber',
+];
+
+// Optional category -> color mapping (no defaults for Doctor/Dentist/Barber)
 const CAT_COLORS = {
   'Work Trip': '#2563eb',
   Holiday: '#22c55e',
@@ -27,7 +41,7 @@ const CAT_COLORS = {
   'On-call': '#a855f7',
 };
 
-// 20 preset colors (click to choose)
+// 20 preset colors to choose from
 const PALETTE = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
   '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9',
@@ -49,7 +63,7 @@ export default function Page() {
   const [form, setForm] = useState({
     title: '',
     category: 'Meeting',
-    color: '', // '' means "use category color"
+    color: '', // '' means "use category color (if available)"
     startDate: '',
     endDate: '',
   });
@@ -93,24 +107,29 @@ export default function Page() {
     return () => supabase.removeChannel(channel);
   }, [session]);
 
-  // Titles + colors
+  // Build calendar events (no hard fallback color; only apply when available)
   const events = useMemo(
     () =>
-      rows.map((r) => ({
-        id: r.id,
-        title: formatEventTitle(r),
-        start: r.start_time,
-        end: r.end_time,
-        allDay: true,
-        backgroundColor: r.color || CAT_COLORS[r.category] || '#64748b',
-        borderColor: r.color || CAT_COLORS[r.category] || '#64748b',
-        extendedProps: {
-          category: r.category,
-          color: r.color,
-          created_by: r.created_by,
-          rawTitle: r.title, // used when editing
-        },
-      })),
+      rows.map((r) => {
+        const eventColor = r.color || CAT_COLORS[r.category]; // may be undefined (allowed)
+        const colorStyle = eventColor
+          ? { backgroundColor: eventColor, borderColor: eventColor }
+          : {};
+        return {
+          id: r.id,
+          title: formatEventTitle(r),
+          start: r.start_time,
+          end: r.end_time,
+          allDay: true,
+          ...colorStyle,
+          extendedProps: {
+            category: r.category,
+            color: r.color,
+            created_by: r.created_by,
+            rawTitle: r.title, // used when editing
+          },
+        };
+      }),
     [rows]
   );
 
@@ -155,7 +174,7 @@ export default function Page() {
     setForm({
       title: raw.rawTitle || ev.title.replace(/\s+\([A-Z -]+\)$/, ''), // fallback strip
       category: raw.category || 'Meeting',
-      color: raw.color || '', // if null in DB, treat as ''
+      color: raw.color || '',
       startDate: new Date(ev.start).toISOString().slice(0, 10),
       endDate: inclusiveEnd,
     });
@@ -177,6 +196,7 @@ export default function Page() {
     const endInc = new Date(form.endDate + 'T00:00:00');
     endInc.setDate(endInc.getDate() + 1);
 
+    // use chosen color OR a category color if that category has one; otherwise null
     const colorToSave = form.color || CAT_COLORS[form.category] || null;
 
     if (editingId) {
@@ -280,7 +300,7 @@ export default function Page() {
                   className="w-full border rounded px-3 py-2"
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g., Holiday, Dentist, Work Trip"
+                  placeholder="Your Name"
                   required
                 />
               </div>
@@ -359,7 +379,7 @@ export default function Page() {
                 </div>
 
                 <p className="text-xs text-gray-600 mt-2">
-                  If no color is selected, the <strong>{form.category}</strong> color will be used.
+                  If no color is selected, the category color will be used <em>if available</em>.
                 </p>
               </div>
 
@@ -381,7 +401,6 @@ export default function Page() {
                 </div>
               </div>
             </form>
-
           </div>
         </div>
       )}
