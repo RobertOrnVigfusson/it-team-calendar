@@ -31,3 +31,20 @@ body {
 .fc .fc-event.meeting   { background: #f59e0b !important; border-color: #f59e0b !important; }   /* amber */
 .fc .fc-event.maintenance { background: #ef4444 !important; border-color: #ef4444 !important; } /* red */
 .fc .fc-event.on-call   { background: #a855f7 !important; border-color: #a855f7 !important; }   /* purple */
+
+/* -----------------------------------------------------------
+   Dark UI select readability
+   Forces high-contrast native dropdowns on dark backgrounds.
+   Apply the class `dark-select` to any <select>.
+   ----------------------------------------------------------- */
+.dark-select {
+  background-color: #ffffff !important;
+  color: #111111 !important;
+}
+
+/* Some browsers read colors from the <option> element */
+.dark-select option {
+  background-color: #ffffff !important;
+  color: #111111 !important;
+}
+
