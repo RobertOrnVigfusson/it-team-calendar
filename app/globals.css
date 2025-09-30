@@ -39,7 +39,7 @@ body {
    ----------------------------------------------------------- */
 .dark-select {
   background-color: #ffffff !important;
-  color: #3b3b3b !important;
+  color: #333333 !important;
 }
 
 /* Some browsers read colors from the <option> element */
