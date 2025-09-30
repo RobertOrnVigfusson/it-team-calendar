@@ -14,7 +14,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: hsl(0, 0%, 23%);
+    --background: hsl(0, 0%, 17%);
     --foreground: #ededed;
   }
 }
@@ -39,7 +39,7 @@ body {
    ----------------------------------------------------------- */
 .dark-select {
   background-color: #ffffff !important;
-  color: #c52323 !important;
+  color: #272727 !important;
 }
 
 /* Some browsers read colors from the <option> element */
