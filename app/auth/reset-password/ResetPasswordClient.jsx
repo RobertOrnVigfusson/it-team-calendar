@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
-// Env (with fallbacks so it still works if Vercel envs are missing)
+// Use envs in prod; fallback for local if needed
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://iztqeczxegnqlopiitys.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -14,57 +14,47 @@ const SUPABASE_ANON_KEY =
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function ResetPasswordClient() {
-  const router = useRouter();
   const params = useSearchParams();
+  const router = useRouter();
 
-  const [status, setStatus] = useState('verifying'); // 'verifying' | 'ready' | 'invalid' | 'done'
-  const [error, setError] = useState(null);
+  const tokenHash = params.get('token_hash') || '';
+  const type = params.get('type') || '';
+
+  const [stage, setStage] = useState<'verifying' | 'ready' | 'invalid' | 'done'>('verifying');
+  const [error, setError] = useState<string | null>(null);
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
 
-  // Read params from URL
-  const token_hash = params?.get('token_hash') || params?.get('token');
-  const type = params?.get('type');
-  const emailParam = params?.get('email') || undefined;
-
+  // Verify the recovery token in this browser
   useEffect(() => {
-    // Must have required params
-    if (!token_hash || type !== 'recovery') {
-      setStatus('invalid');
-      return;
-    }
-
-    const verify = async () => {
-      try {
-        // Build payload safely (email is optional)
-        const payload = { type: 'recovery', token_hash };
-        if (emailParam) payload.email = emailParam;
-
-        // Helpful logs if something goes wrong in prod
-        // (Open DevTools console on the failing page to see these)
-        console.log('[reset-password] verifying payload:', payload);
-
-        const { error } = await supabase.auth.verifyOtp(payload);
-
-        if (error) {
-          console.error('[reset-password] verifyOtp error:', error);
-          setError(error.message);
-          setStatus('invalid');
-        } else {
-          setStatus('ready');
-        }
-      } catch (e) {
-        console.error('[reset-password] unexpected error:', e);
-        setError('Unexpected error verifying reset link.');
-        setStatus('invalid');
+    let mounted = true;
+    (async () => {
+      if (!tokenHash || type !== 'recovery') {
+        if (mounted) setStage('invalid');
+        return;
       }
+
+      const { error } = await supabase.auth.verifyOtp({
+        type: 'recovery',
+        token_hash: tokenHash,          // only token_hash is required for recovery
+      });
+
+      if (!mounted) return;
+
+      if (error) {
+        setError(error.message);
+        setStage('invalid');
+      } else {
+        setStage('ready');
+      }
+    })();
+
+    return () => {
+      mounted = false;
     };
+  }, [tokenHash, type]);
 
-    verify();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token_hash, type, emailParam]);
-
-  async function onSubmit(e) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
@@ -77,93 +67,76 @@ export default function ResetPasswordClient() {
       return;
     }
 
-    try {
-      const { error } = await supabase.auth.updateUser({ password: pw1 });
-      if (error) {
-        setError(error.message);
-        return;
-      }
-      setStatus('done');
-      setTimeout(() => router.push('/'), 1200);
-    } catch (e) {
-      console.error('[reset-password] updateUser error:', e);
-      setError('Could not update password.');
+    const { error } = await supabase.auth.updateUser({ password: pw1 });
+    if (error) {
+      setError(error.message);
+      return;
     }
+
+    setStage('done');
+    setTimeout(() => router.push('/'), 1500);
   }
 
-  // ---------- UI ----------
-  if (status === 'verifying') {
-    return (
-      <main className="min-h-screen grid place-items-center p-6">
-        <div className="max-w-md w-full rounded-xl border p-6">Verifying link…</div>
-      </main>
-    );
-  }
-
-  if (status === 'invalid') {
-    return (
-      <main className="min-h-screen grid place-items-center p-6">
-        <div className="max-w-md w-full rounded-xl border p-6">
-          <h1 className="text-xl font-semibold mb-2">Invalid reset link</h1>
-          <p className="text-sm text-gray-500 mb-4">
-            The password reset link is missing, expired, or already used.
-          </p>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-        </div>
-      </main>
-    );
-  }
-
-  if (status === 'done') {
-    return (
-      <main className="min-h-screen grid place-items-center p-6">
-        <div className="max-w-md w-full rounded-xl border p-6 text-center">
-          <h1 className="text-xl font-semibold mb-2">Password updated</h1>
-          <p className="text-sm text-gray-500">You can now sign in with your new password.</p>
-        </div>
-      </main>
-    );
-  }
-
-  // status === 'ready'
   return (
-    <main className="min-h-screen grid place-items-center p-6">
-      <div className="max-w-md w-full rounded-xl border p-6">
-        <h1 className="text-xl font-semibold mb-4">Reset your password</h1>
+    <div className="min-h-screen grid place-items-center p-6">
+      <div className="w-full max-w-md rounded-xl border p-5 bg-black/10">
+        {stage === 'verifying' && <p>Verifying link…</p>}
 
-        <form className="grid gap-3" onSubmit={onSubmit}>
-          <div>
-            <label className="block text-sm mb-1">New password</label>
-            <input
-              type="password"
-              className="w-full border rounded px-3 py-2"
-              value={pw1}
-              onChange={(e) => setPw1(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Confirm password</label>
-            <input
-              type="password"
-              className="w-full border rounded px-3 py-2"
-              value={pw2}
-              onChange={(e) => setPw2(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-          </div>
+        {stage === 'invalid' && (
+          <>
+            <h2 className="text-xl font-semibold mb-2">Invalid reset link</h2>
+            <p className="text-sm mb-2">
+              The password reset link is missing, expired, already used, or malformed.
+              Please request a new reset email and try again.
+            </p>
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+          </>
+        )}
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+        {stage === 'ready' && (
+          <>
+            <h2 className="text-xl font-semibold mb-4">Set a new password</h2>
+            <form onSubmit={onSubmit} className="grid gap-3">
+              <div>
+                <label className="text-sm block mb-1">New password</label>
+                <input
+                  type="password"
+                  className="w-full border rounded px-3 py-2"
+                  value={pw1}
+                  onChange={(e) => setPw1(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-sm block mb-1">Confirm password</label>
+                <input
+                  type="password"
+                  className="w-full border rounded px-3 py-2"
+                  value={pw2}
+                  onChange={(e) => setPw2(e.target.value)}
+                  required
+                />
+              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="bg-white text-black border rounded px-4 py-2"
+                >
+                  Update password
+                </button>
+              </div>
+            </form>
+          </>
+        )}
 
-          <button type="submit" className="bg-black text-white rounded px-4 py-2 mt-1">
-            Update password
-          </button>
-        </form>
+        {stage === 'done' && (
+          <>
+            <h2 className="text-xl font-semibold mb-2">Password updated</h2>
+            <p className="text-sm">Redirecting you to sign in…</p>
+          </>
+        )}
       </div>
-    </main>
+    </div>
   );
 }
